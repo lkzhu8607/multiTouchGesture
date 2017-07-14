@@ -70,14 +70,13 @@ typedef struct DEVICETOUCHEVENTINFOTAG{
 typedef struct TOUCHPOINTTAG{
     long s;
 	long us;
-	//int X;//code 0
-	//int Y;//code 1
-	int code_47;//slot
-	int code_53;//x
-	int code_54;//y
-	//int pointNum;
+	int code_47;	//slot
+	int code_53;	//x
+	int code_54;	//y
 	int code_57;	//tracking ID
 	int code_58;
+	int code_0;
+	int code_1;
 }TOUCHPOINT;
 
 typedef struct COMMONBASEINFOTAG{
@@ -92,6 +91,12 @@ typedef struct SCREENINFOTAG{
 	COMMONBASEINFO trackID;
 	COMMONBASEINFO pressure;
 }SCREENINFO;
+
+typedef struct SAMPLETOUCHINFOTAG{
+	TOUCHPOINT pointInfo;//采样触摸点的信息
+	int savedFlag;//0:未有存储的信息，1:已存储了触摸点信息
+}SAMPLETOUCHINFO;
+
 
 int getTouchInfo(char *deviceFile, int mode);
 int getTouchInfoFromLog(char *logFileName);

@@ -345,7 +345,11 @@ int getTouchInfoFromLog(char *logFileName)
 						else if(touchInfoFromLog.code == 57)
 							point.code_57 = touchInfoFromLog.value;
 						else if(touchInfoFromLog.code == 58)
-							point.code_58 = touchInfoFromLog.value;				
+							point.code_58 = touchInfoFromLog.value;		
+						else if(touchInfoFromLog.code == 0)
+							point.code_0 = touchInfoFromLog.value;
+						else if(touchInfoFromLog.code == 1)
+							point.code_1 = touchInfoFromLog.value;							
 					}
 				}
 			}
@@ -513,6 +517,12 @@ int getTouchInfo(char *deviceFile, int mode)
 				else if(ev[i].code == 58){
 					point.code_58 = (ev[i].value);
 				}
+				else if(ev[i].code == 0){
+					point.code_0 = (ev[i].value);
+				}
+				else if(ev[i].code == 1){
+					point.code_1 = (ev[i].value);
+				}				
 			}
 		}
 		ComAddQueueNode(&gQueueTouchInfo, (void *)&point);

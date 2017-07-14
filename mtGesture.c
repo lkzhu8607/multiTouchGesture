@@ -24,14 +24,13 @@
 //#define SCREENWIDTH 1920
 //#define SCREENHEIGTH 1080
 
-#define CHECKSOCKTIMEOUT 2000000 //探测包的超时时间
-
+#define CHECKSOCKTIMEOUT 2000000 //探测包的超时时间,当前值的单位为us
 
 #define BASESCALE 10000 //基础倍率，如原图的时候为10000
 #define POWERMAX 1.07  //单次最大的放大倍率
 #define POWERMIN 0.8  //单次最小的缩小倍率
 
-#define MAJOR_VERSION 1   //主版本号
+#define MAJOR_VERSION 2   //主版本号
 #define MINOR_VERSION 00  //次版本号
 
 int singleDragTimeFlag = 0;
@@ -49,6 +48,14 @@ int gSocket = 0;
 	char fileName[128];//当mode = 1时，保存的是设备文件; 当mode = 2时，保存的是已保存触屏信号源信息的文件名
 }SETTING;*/
 SETTING gSetting;
+
+int dragEnableFlag = 0;//合理的情况是，只有在最初一次缩放以后拖拽的动作才能有效
+int singleEnableFlag = 0;//单指标志
+int invalidCountFlag = 0;//合法的手指个数标志位，当手指的个数小于0或者大于10的时候，标记为1
+int invalidSlotValueFlag = 0;//合法的Slot值标志位，0,表示合法的slot;1,表示非法的slot值;小于-1或者大于9的slot值为非法值
+
+SAMPLETOUCHINFO singleFingerBase[2];//针对单个手指的操作数据基准
+SAMPLETOUCHINFO multiFingersBase[2][10];//针对多个手指的操作数据基准
 
 AXIS scaleCenterPoint;//拖拽以后缩放的中心点记录
 
@@ -183,8 +190,33 @@ int checkConn(int sock_cli)
     return ret;	
 }
 
-static TWOPOINTDRAG lastBase[2];
-static int flag = 0;
+int setDragTransData(AXIS CoordinateS, AXIS CoordinateE, TRANSINFO *transInfo)
+{
+	transInfo->scale = htonl(10000);
+	transInfo->x = 0;
+	transInfo->y = 0;
+	if(CoordinateS.x < 0 || CoordinateS.y < 0 || CoordinateE.x < 0 || CoordinateE.y < 0)//过滤
+		return -1;
+
+	if(gSetting.mode == 1){
+		transInfo->dragStart_x = htonl(CoordinateS.x * SCREENWIDTH / gScreenInfo.x.max);
+		transInfo->dragStart_y = htonl(CoordinateS.y * SCREENHEIGTH / gScreenInfo.y.max);
+		transInfo->dragEnd_x = htonl(CoordinateE.x * SCREENWIDTH / gScreenInfo.x.max);
+		transInfo->dragEnd_y = htonl(CoordinateE.y * SCREENHEIGTH / gScreenInfo.y.max);
+	}
+	
+	if(gSetting.mode == 2){
+		transInfo->dragStart_x = htonl(CoordinateS.x * SCREENWIDTH / 5801);
+		transInfo->dragStart_y = htonl(CoordinateS.y * SCREENHEIGTH / 4095);
+		transInfo->dragEnd_x = htonl(CoordinateE.x * SCREENWIDTH / 5801);
+		transInfo->dragEnd_y = htonl(CoordinateE.y * SCREENHEIGTH / 4095);
+	}
+
+	return 0;
+
+}
+
+//static int flag = 0;
 
 int setSingleDragSendData(TOUCHPOINT point0, TOUCHPOINT point1, TRANSINFO *transInfo)
 {
@@ -237,7 +269,7 @@ int setDoubleDragSendData(TWOPOINTDRAG doubleMoveCenter, TRANSINFO *transInfo)
 }
 
 
-int setDoubleScaleSendData(COORDINATEINFO coordinateInfo,int scale,TRANSINFO *transInfo)
+int setScaleSendData(COORDINATEINFO coordinateInfo,int scale,TRANSINFO *transInfo)
 {
 	if(scale > (BASESCALE * POWERMAX) || scale < (BASESCALE * POWERMIN)){
 		return -1;
@@ -327,7 +359,7 @@ int initTouchInfoGatherThread()
 	return 0;
 }
 
-void scaleInfoTrans(void)
+void gestureInfoTrans(void)
 {
 	TOUCHPOINT touchInfo; 
 	
@@ -336,20 +368,28 @@ void scaleInfoTrans(void)
 
 	int scale = 0;
 	TRANSINFO transInfo;
-	//TOUCHPOINT point;
-	TOUCHPOINT dragBase[2];
-	static int singleDrag0Flag = 0;
-	static int singleDrag1Flag = 0;
-	
-	TOUCHPOINT touchBase0[2];//第0组坐标采样
-	TOUCHPOINT touchBase1[2];//第1组坐标采样
-	static int base0Flag = 0;
-	static int base1Flag = 0;
+	TOUCHPOINT point;
 
+	SAMPLETOUCHINFO mapMousePoint;//带有单点触摸信息的点
+	
+	AXIS D_value[2];
+	AXIS dragS_to_Epoint[2] = {{0,0},{0,0}};
+
+	AXIS DValue[10];
+	TOUCHPOINT tmpPointsInfo[2][10];
+	TOUCHPOINT ScalePoint[2][2];
+	int GestureFlag = 0;// 1,drag; 2,scale
 	struct timeval tv;
+	int k = 0;
+	int i = 0;
+	int j = 0;
+	int index[MAX_FINGERS_COUNT] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 	
 	char data[28] = {0};
 	int ret = 0;
+
+	memset(D_value, 0, sizeof(AXIS));
+		
 	if(gSetting.mode == 1){
 		while(1){
 			ret = socketConnect();
@@ -369,7 +409,14 @@ void scaleInfoTrans(void)
 	SEND_LOG("time(s)\ttime(us)\tscale\tcenter_x\tcenter_y\tdrag_start_x\tdrag_start_y\tdrag_end_x\tdrag_end_y");
 	while(1)
 	{
-		memset(&touchInfo,-2,sizeof(touchInfo));
+		memset(&touchInfo,-2,sizeof(TOUCHPOINT));
+		memset(&point, 0,sizeof(point));
+		memset(tmpPointsInfo, 0, sizeof(TOUCHPOINT)*20);
+		memset(DValue, 0, sizeof(AXIS)*2);
+		memset(dragS_to_Epoint, 0, sizeof(AXIS)*2);
+		memset(ScalePoint, 0, sizeof(TOUCHPOINT)*4);
+		memset(&coordinate0Base, 0, sizeof(COORDINATEINFO));
+		memset(&coordinate1Base, 0, sizeof(COORDINATEINFO));
 		if(gQueueTouchInfo.QueueNodeCount == 0)
 		{
 			usleep(200);
@@ -378,41 +425,225 @@ void scaleInfoTrans(void)
 		ret = ComGetQueueNode(&gQueueTouchInfo, (void *)&touchInfo);
 		if(ret == 1)
 		{
-			//TODO
-			//INFO_LOG("succ to get a touch info\n");
-			if(singleDrag0Flag == 0){
-				ret = sampleBaseDragsinglePointInfo(touchInfo, &dragBase[0]);
-				if(ret == 0){
-					INFO_LOG("Succ to get the first dragging point");
-					singleDrag0Flag = 1;
+			//采样处理
+			if(!samplePointInfo(touchInfo, &point)){
+				if(point.code_0 > 0 || point.code_1 > 0){
+					if(mapMousePoint.savedFlag == 0){
+						memcpy(&mapMousePoint.pointInfo, &point, sizeof(TOUCHPOINT));
+						mapMousePoint.savedFlag = 1;
+					}
+					else if(mapMousePoint.savedFlag == 1){
+						updateSampleInfo(point, &mapMousePoint.pointInfo);
+					}	
+					memcpy(&point, &mapMousePoint.pointInfo, sizeof(TOUCHPOINT));
+				}
+					
+				if(point.code_47 < 0){//确定单指操作
+					if(point.code_57 == -1){
+						memset(singleFingerBase, 0  ,  sizeof(SAMPLETOUCHINFO) *2 );
+						if(detectFingerCount > 0)
+							detectFingerCount--;
+						continue;
+					}		
+					singleEnableFlag = 1;
+					if(singleFingerBase[0].savedFlag == 0){
+						memcpy(&singleFingerBase[0].pointInfo, &point, sizeof(TOUCHPOINT));
+						singleFingerBase[0].savedFlag = 1;
+					}
+					else if(singleFingerBase[0].savedFlag == 1){
+						if(singleFingerBase[1].savedFlag == 0){
+							memcpy(&singleFingerBase[1].pointInfo, &point, sizeof(TOUCHPOINT));
+							singleFingerBase[1].savedFlag = 1;
+							detectFingerCount++;
+						}
+						else if(singleFingerBase[1].savedFlag == 1){
+							complementSampleInfo(singleFingerBase[0].pointInfo, &singleFingerBase[1].pointInfo);
+							memcpy(&singleFingerBase[0].pointInfo, &singleFingerBase[1].pointInfo, sizeof(TOUCHPOINT));
+							memcpy(&singleFingerBase[1].pointInfo, &point, sizeof(TOUCHPOINT));
+
+						}
+					}
+				}
+				else{//单指或多指操作
+					singleEnableFlag = 0;
+					if(point.code_47 > 9){
+						invalidSlotValueFlag = 1;
+					}
+					else{
+						for(k = 0; k < MAX_FINGERS_COUNT; k++){
+							if(point.code_47 == multiFingersBase[0][k].pointInfo.code_47){//multiFingersBase
+								if(point.code_57 == -1){
+									memset(&multiFingersBase[0][k], 0, sizeof(SAMPLETOUCHINFO));
+									memset(&multiFingersBase[1][k], 0, sizeof(SAMPLETOUCHINFO));
+									if(detectFingerCount > 0)
+										detectFingerCount--;									
+									break;
+								}
+								if(multiFingersBase[0][k].savedFlag == 0){
+									memcpy(&multiFingersBase[0][k].pointInfo, &point, sizeof(TOUCHPOINT));
+									multiFingersBase[0][k].savedFlag = 1;
+								}
+								else if(multiFingersBase[0][k].savedFlag == 1){
+									if(multiFingersBase[1][k].savedFlag == 0){
+										//complementSampleInfo(multiFingersBase[0][index[0]].pointInfo, &multiFingersBase[1][index[0]].pointInfo);
+										memcpy(&multiFingersBase[1][k].pointInfo, &point, sizeof(TOUCHPOINT));
+										multiFingersBase[1][k].savedFlag = 1;
+										detectFingerCount++;
+									}									
+									else if(multiFingersBase[1][k].savedFlag == 1){
+										complementSampleInfo(multiFingersBase[0][k].pointInfo, &multiFingersBase[1][k].pointInfo);
+										memcpy(&multiFingersBase[0][k].pointInfo, &multiFingersBase[1][k].pointInfo, sizeof(TOUCHPOINT));
+										memcpy(&multiFingersBase[1][k].pointInfo, &point, sizeof(TOUCHPOINT));
+									}
+								}
+								break;
+							}
+						}
+					}
 				}
 			}
-			else{
-				ret = sampleBaseDragsinglePointInfo(touchInfo, &dragBase[1]);
-				if(ret == 0){
-					INFO_LOG("Succ to get the second dragging point\n");
-					singleDrag1Flag = 1;
+
+			//手势识别
+			if(detectFingerCount != existFingerCount){
+				continue;
+			}
+			if(detectFingerCount >= 1){
+				if(singleEnableFlag == 1){
+					ret = calSinglePointMoveDistance(singleFingerBase[0].pointInfo, singleFingerBase[1].pointInfo);
+					if(ret == 0){
+						setSingleDragSendData(singleFingerBase[0].pointInfo, singleFingerBase[1].pointInfo, &transInfo);
+						GestureFlag = 1;
+						INFO_LOG("single dragging ret = %d\n",ret);
+						singleDragTimeFlag++;
+					}	
 				}
-				else if(ret == -2){
-					INFO_LOG("Dragging point info disappear\n");
-					memcpy(&dragBase[0], &dragBase[1], sizeof(TOUCHPOINT));
-					memset(&dragBase[1], 0, sizeof(TOUCHPOINT));
-					singleDrag0Flag = 1;
-				}
-				else if(ret == -3){
-					//memcpy(&dragBase[0], &dragBase[1], sizeof(TOUCHPOINT)*2);
-					memset(dragBase, 0, sizeof(TOUCHPOINT)*2);
-					singleDrag0Flag = 0;
-					singleDrag1Flag = 0;
+				else if(singleEnableFlag == 0){
+					for(i = 0; i < MAX_FINGERS_COUNT; i++){
+						if(multiFingersBase[1][i].savedFlag == 1){
+							index[j++] = i;
+						}
+						else
+							continue;
+					}
+					if(detectFingerCount == 1){
+						complementSampleInfo(multiFingersBase[0][index[0]].pointInfo, &multiFingersBase[1][index[0]].pointInfo);
+						ret = calSinglePointMoveDistance(multiFingersBase[0][index[0]].pointInfo, multiFingersBase[1][index[0]].pointInfo);
+						if(ret == 0){
+							setSingleDragSendData(multiFingersBase[0][index[0]].pointInfo, multiFingersBase[1][index[0]].pointInfo, &transInfo);
+							GestureFlag = 1;
+							INFO_LOG("single--m dragging ret = %d\n",ret);
+							singleDragTimeFlag++;
+						}
+						memcpy(&multiFingersBase[0][index[0]].pointInfo, &multiFingersBase[1][index[0]].pointInfo, sizeof(TOUCHPOINT));
+						memset(&multiFingersBase[1][index[0]], 0, sizeof(SAMPLETOUCHINFO));
+						//setDragTransData(dragS_to_Epoint[0], dragS_to_Epoint[1], &transInfo);
+						
+					}
+					else if(detectFingerCount == 2){
+						complementSampleInfo(multiFingersBase[0][index[0]].pointInfo, &multiFingersBase[1][index[0]].pointInfo);
+						complementSampleInfo(multiFingersBase[0][index[1]].pointInfo, &multiFingersBase[1][index[1]].pointInfo);
+
+						calCenterCoordinate(multiFingersBase[0][index[0]].pointInfo,  multiFingersBase[0][index[1]].pointInfo, &coordinate0Base);
+						calCenterCoordinate(multiFingersBase[1][index[0]].pointInfo,  multiFingersBase[1][index[1]].pointInfo, &coordinate1Base);
+						if((scale = calScaling(coordinate0Base.variance, coordinate1Base.variance)) != -1)
+						{
+							INFO_LOG("two figners scaling...");
+							setScaleSendData(coordinate1Base, scale, &transInfo);
+							dragEnableFlag = 1;
+							singleDragTimeFlag = 0;
+							GestureFlag = 2;
+						}	
+
+						calCoordinateDeviation(multiFingersBase[0][index[0]].pointInfo, multiFingersBase[0][index[1]].pointInfo, &D_value[0].x, &D_value[0].y);
+						calCoordinateDeviation(multiFingersBase[1][index[0]].pointInfo, multiFingersBase[1][index[1]].pointInfo, &D_value[1].x, &D_value[1].y);
+						if(calD_value(D_value) == 0){//两点拖拽动作生效
+							singleDragTimeFlag++;
+							INFO_LOG("two figners dragging...");
+							dragS_to_Epoint[0].x = coordinate0Base.center_x;
+							dragS_to_Epoint[0].y = coordinate0Base.center_y;
+							dragS_to_Epoint[1].x = coordinate1Base.center_x;
+							dragS_to_Epoint[1].y = coordinate1Base.center_y;
+							GestureFlag = 1;
+							setDragTransData(dragS_to_Epoint[0], dragS_to_Epoint[1], &transInfo);
+						}
+
+						memcpy(&multiFingersBase[0][index[0]].pointInfo, &multiFingersBase[1][index[0]].pointInfo, sizeof(TOUCHPOINT));
+						memcpy(&multiFingersBase[0][index[1]].pointInfo, &multiFingersBase[1][index[1]].pointInfo, sizeof(TOUCHPOINT));
+						memset(&multiFingersBase[1][index[0]], 0, sizeof(SAMPLETOUCHINFO));
+						memset(&multiFingersBase[1][index[1]], 0, sizeof(SAMPLETOUCHINFO));
+					}
+					else if(detectFingerCount > 2 && detectFingerCount <= 10){
+						//补全后点的触摸信息
+						for(i = 0; i < detectFingerCount; i++){
+							complementSampleInfo(multiFingersBase[0][index[i]].pointInfo, &multiFingersBase[1][index[i]].pointInfo);
+							memcpy(&tmpPointsInfo[0][i], &multiFingersBase[0][index[i]].pointInfo, sizeof(TOUCHPOINT));
+							memcpy(&tmpPointsInfo[1][i], &multiFingersBase[1][index[i]].pointInfo, sizeof(TOUCHPOINT));
+						}
+						multiPointCoordinateDeviation(tmpPointsInfo, detectFingerCount, &GestureFlag, dragS_to_Epoint, ScalePoint);
+						if(GestureFlag == 1){
+							singleDragTimeFlag++;
+							setDragTransData(dragS_to_Epoint[0], dragS_to_Epoint[1], &transInfo);
+						}
+						else if(GestureFlag == 2){
+							dragEnableFlag = 1;
+							singleDragTimeFlag = 0;
+							calCenterCoordinate(ScalePoint[0][0],  ScalePoint[0][1], &coordinate0Base);
+							calCenterCoordinate(ScalePoint[1][0],  ScalePoint[1][1], &coordinate1Base);
+							if((scale = calScaling(coordinate0Base.variance, coordinate1Base.variance)) != -1)
+							{
+								INFO_LOG("multi figners scaling...");
+								setScaleSendData(coordinate1Base, scale, &transInfo);
+							}							
+						}
+						for(i = 0; i < detectFingerCount; i++){
+							memcpy(&multiFingersBase[0][index[i]].pointInfo, &multiFingersBase[1][index[i]].pointInfo, sizeof(TOUCHPOINT));
+							memset(&multiFingersBase[1][index[i]], 0, sizeof(SAMPLETOUCHINFO));						
+						}
+					}
+
+
+					detectFingerCount = 0;
+					j = 0;
 				}
 			}
-			INFO_LOG("singleDrag0Flag = %d, singleDrag1Flag = %d\n",singleDrag0Flag, singleDrag1Flag);
-			if(singleDrag0Flag == 1 && singleDrag1Flag == 1){
-				singleDragTimeFlag++;
-				ret = calSinglePointMoveDistance(dragBase[0], dragBase[1]);
-				INFO_LOG("Dragging ret = %d\n",ret);
-				if(ret == 0){
-					ret = setSingleDragSendData(dragBase[0], dragBase[1], &transInfo);
+			else
+				continue;
+
+			//动作数据传输
+			//过滤不合法的transInfo
+			if(ntohl(transInfo.scale) > (BASESCALE * POWERMAX) || ntohl(transInfo.scale) < (BASESCALE * POWERMIN)){
+				continue;
+			}
+			
+			if(GestureFlag == 2){
+				if(GestureFlag == 2){
+					if(gSetting.mode == 2){
+						gettimeofday(&tv, NULL);
+						SEND_LOG("%ld\t%06ld\t%d\t%d\t%d\t%d\t%d\t%d\t%d", tv.tv_sec, tv.tv_usec, ntohl(transInfo.scale), ntohl(transInfo.x), ntohl(transInfo.y), 0, 0, 0, 0);
+						continue;
+					}		
+					else if(gSetting.mode == 1){
+						memcpy(data, &transInfo, 28);
+						while(1){
+							if(checkConn(gSocket) == 0){
+								gettimeofday(&tv, NULL);
+								if(sendData(gSocket, data, 28)==0)//发送数据
+									SEND_LOG("%ld\t%06ld\t%d\t%d\t%d\t%d\t%d\t%d\t%d", tv.tv_sec, tv.tv_usec, ntohl(transInfo.scale), ntohl(transInfo.x), ntohl(transInfo.y), 0, 0, 0, 0);
+								break;							
+							}
+							else{
+								reSocketConnect();
+								continue;
+							}
+						}
+					}
+				}
+			}
+			else if(GestureFlag == 1){
+				if(gSetting.mode == 2){
+					dragEnableFlag = 1;
+				}
+				if(dragEnableFlag == 1){
 					if(gSetting.mode == 2){
 						gettimeofday(&tv, NULL);
 						SEND_LOG("%ld\t%06ld\t%d\t%d\t%d\t%d\t%d\t%d\t%d", tv.tv_sec, tv.tv_usec, 10000, 0, 0, ntohl(transInfo.dragStart_x), ntohl(transInfo.dragStart_y), ntohl(transInfo.dragEnd_x), ntohl(transInfo.dragEnd_y));
@@ -436,121 +667,15 @@ void scaleInfoTrans(void)
 						}	
 					}
 				}
-				singleDrag1Flag = 0;
-				if(dragBase[1].code_53 > 0)
-					dragBase[0].code_53 = dragBase[1].code_53;
-				if(dragBase[1].code_54 > 0)
-					dragBase[0].code_54 = dragBase[1].code_54;
-				scaleCenterPoint.x = dragBase[0].code_53;
-				scaleCenterPoint.y = dragBase[0].code_54;
-				memset(&dragBase[1], 0, sizeof(TOUCHPOINT));
 			}
-			
-			//INFO_LOG("base0Flag = %d, base1Flag = %d\n", base0Flag, base1Flag);
-			if(base0Flag == 0)//获取第一组点
-			{
-				ret = sampleBasePointInfo(touchInfo, &touchBase0[0], &touchBase0[1]);
-				if(ret == 0)
-					base0Flag = 1;
-				else if(ret == -2)
-				{
-					//INFO_LOG("The first group's the first point info disappear\n");
-					memset(&touchBase0[0],0,sizeof(TOUCHPOINT));
-					base0Flag = 0;
-					continue;
-				}
-				else if(ret == -3)
-				{
-					//INFO_LOG("The first group's the second point info disappear\n");
-					memset(&touchBase0[1],0,sizeof(TOUCHPOINT));
-					base0Flag = 0;
-					continue;
-				}
-				else
-					continue;				
-			}
-			else//获取第二组点
-			{
-				ret = sampleBasePointInfo(touchInfo, &touchBase1[0], &touchBase1[1]);
-				if(ret == 0){
-					base1Flag = 1;
-					//INFO_LOG("touchBase1[0].code_53 = %d, touchBase1[0].code_54 = %d\n", touchBase1[0].code_53, touchBase1[0].code_54);
-					//INFO_LOG("touchBase1[1].code_53 = %d, touchBase1[1].code_54 = %d\n", touchBase1[1].code_53, touchBase1[1].code_54);
-				}
-				else if(ret == -2 || ret == -3)
-				{
-					if(ret == -2){
-						freshValue(touchBase0[1], &touchBase1[1]);
-						memset(&touchBase0,0,sizeof(TOUCHPOINT)*2);
-						memcpy(&touchBase0[1],&touchBase1[1],sizeof(TOUCHPOINT));						
-					}
-					else if(ret == -3){
-						freshValue(touchBase0[0], &touchBase1[0]);
-						memset(&touchBase0,0,sizeof(TOUCHPOINT)*2);						
-						memcpy(&touchBase0[0],&touchBase1[0],sizeof(TOUCHPOINT));
-						//INFO_LOG("The second group's the second point info disappear\n");
-					}
-					memset(&touchBase1,0,sizeof(TOUCHPOINT)*2);
-					base0Flag = 0;
-					base1Flag = 0;
-					continue;
-				}
-				else
-					continue;
-			}
-			if(base1Flag == 1 && base0Flag == 1)//一次采样完毕
-			{
-				singleDragTimeFlag = 0;
-				calCenterCoordinate(touchBase0[0],  touchBase0[1], &coordinate0Base);
-				calCenterCoordinate(touchBase1[0],  touchBase1[1], &coordinate1Base);
-				if((scale = calScaling(coordinate0Base.variance, coordinate1Base.variance)) != -1)
-				{
-					ret = setDoubleScaleSendData(coordinate1Base, scale, &transInfo);
-					if(ret == -1){
-						base0Flag = 0;
-						base1Flag = 0;
-						memset(touchBase0,0,sizeof(TOUCHPOINT)*2);
-						memset(touchBase1,0,sizeof(TOUCHPOINT)*2);
-						continue;
-					}
-					if(gSetting.mode == 2){
-						gettimeofday(&tv, NULL);
-						SEND_LOG("%ld\t%06ld\t%d\t%d\t%d\t%d\t%d\t%d\t%d", tv.tv_sec, tv.tv_usec, ntohl(transInfo.scale), ntohl(transInfo.x), ntohl(transInfo.y), 0, 0, 0, 0);
-						continue;
-					}		
-					else if(gSetting.mode == 1){
-						memcpy(data, &transInfo, 28);
-						while(1){
-							if(checkConn(gSocket) == 0){
-								gettimeofday(&tv, NULL);
-								if(sendData(gSocket, data, 28)==0)//发送数据
-									SEND_LOG("%ld\t%06ld\t%d\t%d\t%d\t%d\t%d\t%d\t%d", tv.tv_sec, tv.tv_usec, ntohl(transInfo.scale), ntohl(transInfo.x), ntohl(transInfo.y), 0, 0, 0, 0);
-								break;							
-							}
-							else{
-								reSocketConnect();
-								continue;
-							}
-						}
-					}
-					memset(touchBase0,0,sizeof(TOUCHPOINT)*2);
-					memcpy(touchBase0,touchBase1,sizeof(TOUCHPOINT)*2);
-					memset(touchBase1,0,sizeof(TOUCHPOINT)*2);
-					base1Flag = 0;
-				}
-				else{
-					base1Flag = 0;
-				}
-			}
-			else
-				continue;
 		}
 		else
 		{
 			continue;
 			ERROR_LOG("Fail to get node from queue\n");
 		}
-		usleep(200);
+		GestureFlag = 0;
+		usleep(200);		
 	}
 }
 
@@ -559,7 +684,7 @@ int initScaleInfoTransThread()
     /* 初始化线程属性结构体 */
     pthread_attr_init( &gScaleInfoIDAttr);
 	
-    if ( 0 != pthread_create(&gScaleInfoID, &gScaleInfoIDAttr, (void *)scaleInfoTrans, NULL))
+    if ( 0 != pthread_create(&gScaleInfoID, &gScaleInfoIDAttr, (void *)gestureInfoTrans, NULL))
     {
         printf( "RUN Touch Info Gather THREAD ERROR!\n");
 		ERROR_LOG("RUN Touch Info Gather THREAD ERROR!\n");
@@ -587,7 +712,7 @@ int getVersion()
 		ERROR_LOG("Fail to open mtGestureVersion");
 		return -1;
 	}	
-	fprintf(fp,"%d.%2d",MAJOR_VERSION, MINOR_VERSION);
+	fprintf(fp,"%d.%02d",MAJOR_VERSION, MINOR_VERSION);
 	INFO_LOG("software version:%d.%02d\n",MAJOR_VERSION, MINOR_VERSION);
 	fclose(fp);
 	return 0;
@@ -598,6 +723,19 @@ int main(int argc, char **argv)
 {
 	int ret = 0;
 	char ch;
+	int i = 0;
+	int j = 0;
+	
+	memset(singleFingerBase, 0, sizeof(SAMPLETOUCHINFO)*2);
+	memset(multiFingersBase, 0, sizeof(SAMPLETOUCHINFO)*20);
+
+	//初始化触摸点信息的基数组
+	for(j = 0; j< 2; j++){
+		for(i = 0; i < MAX_FINGERS_COUNT; i++){
+			multiFingersBase[j][i].pointInfo.code_47 = i;
+		}
+	}
+
 	memset(gInputDeviceFile, '0', 128);
 	ret = getVersion();
 	if(ret == -1){
