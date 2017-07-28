@@ -22,7 +22,7 @@ static int point1Flag = 0;
 
 int existFingerCount = 0;//前次检测到的手指个数
 int detectFingerCount = 0;//当前正在监测到的手指个数
-
+static TOUCHPOINT LastTouchedPointInfo = {0, 0, 0, 0, 0, 0, 0, 0, 0};//上一个非离开点信息
 FINGER slotStatus[10] = {{0,0},{1,0},{2,0},{3,0},{4,0},{5,0},{6,0},{7,0},{8,0},{9,0}};
 
 
@@ -112,7 +112,7 @@ int calDoublePointVariance(TOUCHPOINT point0, TOUCHPOINT point1)
 		absY = point1.code_54 - point0.code_54;
 
 	variance = SQUARE(absX) + SQUARE(absY);
-	
+
 	return variance;
 }
 
@@ -1099,21 +1099,22 @@ int samplePointInfo(TOUCHPOINT pointIn, TOUCHPOINT *pointOut)
 			pointOut->code_1 = pointIn.code_1;
 			return 0;
 		}
-			if(pointIn.code_47 >= 0){
-				if(slotCheck(pointIn.code_47, 1) == 1){
-					if(singleFlag == 1){
+		if(pointIn.code_47 >= 0){
+			if(slotCheck(pointIn.code_47, 1) == 1){
+				if(singleFlag == 1){
+					if(existFingerCount > 0)
 						existFingerCount -= 1;
-						singleFlag = 0;
-					}
-					existFingerCount++;
+					singleFlag = 0;
 				}
-				currentPoint = pointIn.code_47;
+				existFingerCount++;
 			}
-			else{
-				existFingerCount = 1;
-				singleFlag = 1;
-				currentPoint = -1;
-			}
+			currentPoint = pointIn.code_47;
+		}
+		else{
+			existFingerCount = 1;
+			singleFlag = 1;
+			currentPoint = -1;
+		}
 		pointOut->code_47 = pointIn.code_47;
 		pointOut->code_53 = pointIn.code_53;
 		pointOut->code_54 = pointIn.code_54;
@@ -1121,18 +1122,22 @@ int samplePointInfo(TOUCHPOINT pointIn, TOUCHPOINT *pointOut)
 		pointOut->code_58 = pointIn.code_58;
 		pointOut->code_0 = pointIn.code_0;
 		pointOut->code_1 = pointIn.code_1;
+		memcpy(&LastTouchedPointInfo, &pointIn, sizeof(TOUCHPOINT));
 	}
 	else{
 		if(pointIn.code_57 == -1){
 			if(slotCheck(frontPoint, 0) == 2){
 				if(existFingerCount > 0)
-					existFingerCount--;				
-			}	
+					existFingerCount--;	
+			}
 			currentPoint = -1;
 			pointOut->code_47 = frontPoint;
 			pointOut->code_57 = -1;
+			pointOut->code_53 = pointIn.code_53;
+			pointOut->code_54 = pointIn.code_54;
+			pointOut->code_0 = pointIn.code_0;
+			pointOut->code_1 = pointIn.code_1;
 			frontPoint = currentPoint;
-			//return -1;
 		}
 		else{
 			if(pointIn.code_47 >= 0){
@@ -1145,7 +1150,6 @@ int samplePointInfo(TOUCHPOINT pointIn, TOUCHPOINT *pointOut)
 				 currentPoint = frontPoint;
 			}
 			if(pointIn.code_53 > 0 || pointIn.code_54 > 0){
-				//pointOut->code_47 = pointIn.code_47;//point->code_47 = frontDragPoint;	
 				pointOut->code_47 = currentPoint;
 				pointOut->code_53 = pointIn.code_53;
 				pointOut->code_54 = pointIn.code_54;
@@ -1153,6 +1157,7 @@ int samplePointInfo(TOUCHPOINT pointIn, TOUCHPOINT *pointOut)
 				pointOut->code_58 = pointIn.code_58;
 				pointOut->code_0 = pointIn.code_0;
 				pointOut->code_1 = pointIn.code_1;
+				memcpy(&LastTouchedPointInfo, &pointIn, sizeof(TOUCHPOINT));
 			}			
 		}
 	}

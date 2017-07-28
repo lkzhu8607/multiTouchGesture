@@ -426,16 +426,47 @@ void gestureInfoTrans(void)
 		if(ret == 1)
 		{
 			//采样处理
-			if(!samplePointInfo(touchInfo, &point)){
-				if(point.code_0 > 0 || point.code_1 > 0){
-					if(mapMousePoint.savedFlag == 0){
-						memcpy(&mapMousePoint.pointInfo, &point, sizeof(TOUCHPOINT));
-						mapMousePoint.savedFlag = 1;
+			if(!samplePointInfo(touchInfo, &point)){				
+				if(point.code_0 > 0 || point.code_1 > 0){//对应鼠标的触摸点信息处理过程
+					if(point.code_57 == -1){
+						if(existFingerCount > 0){//鼠标映射点将转移到另外的手指
+							//mapMousePoint.pointInfo.code_0 = point.code_0;
+							//mapMousePoint.pointInfo.code_1 = point.code_1;
+							memcpy(&mapMousePoint.pointInfo, &touchInfo, sizeof(TOUCHPOINT));
+						}
+						else if(existFingerCount == 0){//屏幕上无触摸点存在
+							memset(&mapMousePoint, 0, sizeof(SAMPLETOUCHINFO));
+						}
 					}
-					else if(mapMousePoint.savedFlag == 1){
-						updateSampleInfo(point, &mapMousePoint.pointInfo);
-					}	
-					memcpy(&point, &mapMousePoint.pointInfo, sizeof(TOUCHPOINT));
+					else{
+						if(mapMousePoint.savedFlag == 0){//使用mapMousePoint暂存对应鼠标点信息，以供接下来使用
+							memcpy(&mapMousePoint.pointInfo, &point, sizeof(TOUCHPOINT));
+							mapMousePoint.savedFlag = 1;
+						}
+						else if(mapMousePoint.savedFlag == 1){							
+							if(mapMousePoint.pointInfo.code_47 != point.code_47){
+								for(i = 0; i < MAX_FINGERS_COUNT; i++){
+									if(multiFingersBase[0][i].pointInfo.code_47 == point.code_47){
+										if(multiFingersBase[1][i].savedFlag ==1){
+											complementSampleInfo(multiFingersBase[1][i].pointInfo, &point);
+										}
+										else{
+											complementSampleInfo(multiFingersBase[0][i].pointInfo, &point);
+										}
+										//memcpy(&mapMousePoint.pointInfo, &point, sizeof(TOUCHPOINT));
+										//complementSampleInfo(point, &mapMousePoint.pointInfo);
+										updateSampleInfo(point, &mapMousePoint.pointInfo);
+										//mapMousePoint.savedFlag = 1;
+										break;
+									}
+								}
+							}
+							else{
+								updateSampleInfo(point, &mapMousePoint.pointInfo);
+								memcpy(&point, &mapMousePoint.pointInfo, sizeof(TOUCHPOINT));
+							}
+						}							
+					}
 				}
 					
 				if(point.code_47 < 0){//确定单指操作
@@ -460,7 +491,6 @@ void gestureInfoTrans(void)
 							complementSampleInfo(singleFingerBase[0].pointInfo, &singleFingerBase[1].pointInfo);
 							memcpy(&singleFingerBase[0].pointInfo, &singleFingerBase[1].pointInfo, sizeof(TOUCHPOINT));
 							memcpy(&singleFingerBase[1].pointInfo, &point, sizeof(TOUCHPOINT));
-
 						}
 					}
 				}
@@ -475,6 +505,9 @@ void gestureInfoTrans(void)
 								if(point.code_57 == -1){
 									memset(&multiFingersBase[0][k], 0, sizeof(SAMPLETOUCHINFO));
 									memset(&multiFingersBase[1][k], 0, sizeof(SAMPLETOUCHINFO));
+									if(point.code_47 == mapMousePoint.pointInfo.code_47){
+										memset(&mapMousePoint, 0, sizeof(SAMPLETOUCHINFO));
+									}
 									if(detectFingerCount > 0)
 										detectFingerCount--;									
 									break;
@@ -502,9 +535,21 @@ void gestureInfoTrans(void)
 					}
 				}
 			}
-
+			
 			//手势识别
+			if(existFingerCount <= 0){
+				for(i = 0; i < MAX_FINGERS_COUNT; i++){//该操作很重要，如果无此操作可能导致某次手势以后的其他操作永久无法有效
+					multiFingersBase[0][i].pointInfo.code_47 = i;
+					multiFingersBase[1][i].pointInfo.code_47 = i;
+				}				
+				continue;
+			}
+			
 			if(detectFingerCount != existFingerCount){
+				for(i = 0; i < MAX_FINGERS_COUNT; i++){//该操作很重要，如果无此操作可能导致某次手势以后的其他操作永久无法有效
+					multiFingersBase[0][i].pointInfo.code_47 = i;
+					multiFingersBase[1][i].pointInfo.code_47 = i;
+				}				
 				continue;
 			}
 			if(detectFingerCount >= 1){
@@ -604,6 +649,11 @@ void gestureInfoTrans(void)
 
 					detectFingerCount = 0;
 					j = 0;
+					memset(index, 0, sizeof(int));
+					for(i = 0; i < MAX_FINGERS_COUNT; i++){//该操作很重要，如果无此操作可能导致某次手势以后的其他操作永久无法有效
+						multiFingersBase[0][i].pointInfo.code_47 = i;
+						multiFingersBase[1][i].pointInfo.code_47 = i;
+					}
 				}
 			}
 			else
