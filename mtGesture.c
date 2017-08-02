@@ -26,9 +26,11 @@
 
 #define CHECKSOCKTIMEOUT 2000000 //探测包的超时时间,当前值的单位为us
 
+static int releaseFlag = 0;//0,表示触摸屏上次操作存在手指信息；1，表示上次操作后无手指在触摸屏上
+
 #define BASESCALE 10000 //基础倍率，如原图的时候为10000
-#define POWERMAX 1.07  //单次最大的放大倍率
-#define POWERMIN 0.8  //单次最小的缩小倍率
+#define POWERMAX 1.07   //单次最大的放大倍率
+#define POWERMIN 0.8    //单次最小的缩小倍率
 
 #define MAJOR_VERSION 2   //主版本号
 #define MINOR_VERSION 00  //次版本号
@@ -542,6 +544,7 @@ void gestureInfoTrans(void)
 					multiFingersBase[0][i].pointInfo.code_47 = i;
 					multiFingersBase[1][i].pointInfo.code_47 = i;
 				}				
+				releaseFlag = 1;
 				continue;
 			}
 			
@@ -704,10 +707,18 @@ void gestureInfoTrans(void)
 						while(1){
 							if(checkConn(gSocket) == 0){
 								gettimeofday(&tv, NULL);
-								if(singleDragTimeFlag > 4 ){
+								if(releaseFlag == 1){
 									if(sendData(gSocket, data, 28) == 0)//发送数据
 										SEND_LOG("%ld\t%06ld\t%d\t%d\t%d\t%d\t%d\t%d\t%d", tv.tv_sec, tv.tv_usec, 10000, 0, 0, ntohl(transInfo.dragStart_x), ntohl(transInfo.dragStart_y), ntohl(transInfo.dragEnd_x), ntohl(transInfo.dragEnd_y));
+									releaseFlag = 0;
 								}
+								else if(releaseFlag == 0){
+									if(singleDragTimeFlag > 4 ){
+										if(sendData(gSocket, data, 28) == 0)//发送数据
+											SEND_LOG("%ld\t%06ld\t%d\t%d\t%d\t%d\t%d\t%d\t%d", tv.tv_sec, tv.tv_usec, 10000, 0, 0, ntohl(transInfo.dragStart_x), ntohl(transInfo.dragStart_y), ntohl(transInfo.dragEnd_x), ntohl(transInfo.dragEnd_y));
+									}
+								}
+
 								break;
 							}
 							else{
