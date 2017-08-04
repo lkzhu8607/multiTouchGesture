@@ -35,9 +35,13 @@ static int releaseFlag = 0;//0,表示触摸屏上次操作存在手指信息；1，表示上次操作后
 #define MAJOR_VERSION 2   //主版本号
 #define MINOR_VERSION 00  //次版本号
 
+
+
+#define FILTER_DRAG_GESTURE 4 //过滤缩放过程中因夹杂的拖拽动作产生的抖动
+
 int singleDragTimeFlag = 0;
 pthread_t gTouchInfoID = 0;
-pthread_t gScaleInfoID = 0;
+pthread_t gGestureInfoID = 0;
 pthread_attr_t  gTouchInfoIDAttr; 
 pthread_attr_t  gScaleInfoIDAttr;
 
@@ -564,8 +568,12 @@ void gestureInfoTrans(void)
 						INFO_LOG("single dragging ret = %d\n",ret);
 						singleDragTimeFlag++;
 					}	
+					detectFingerCount = 0;
+					memcpy(&singleFingerBase[0].pointInfo, &singleFingerBase[1].pointInfo, sizeof(TOUCHPOINT));
+					memset(&singleFingerBase[1], 0, sizeof(SAMPLETOUCHINFO));
 				}
 				else if(singleEnableFlag == 0){
+					memset(singleFingerBase, 0  ,  sizeof(SAMPLETOUCHINFO) *2 );
 					for(i = 0; i < MAX_FINGERS_COUNT; i++){
 						if(multiFingersBase[1][i].savedFlag == 1){
 							index[j++] = i;
@@ -713,7 +721,7 @@ void gestureInfoTrans(void)
 									releaseFlag = 0;
 								}
 								else if(releaseFlag == 0){
-									if(singleDragTimeFlag > 4 ){
+									if(singleDragTimeFlag > FILTER_DRAG_GESTURE){
 										if(sendData(gSocket, data, 28) == 0)//发送数据
 											SEND_LOG("%ld\t%06ld\t%d\t%d\t%d\t%d\t%d\t%d\t%d", tv.tv_sec, tv.tv_usec, 10000, 0, 0, ntohl(transInfo.dragStart_x), ntohl(transInfo.dragStart_y), ntohl(transInfo.dragEnd_x), ntohl(transInfo.dragEnd_y));
 									}
@@ -745,7 +753,7 @@ int initScaleInfoTransThread()
     /* 初始化线程属性结构体 */
     pthread_attr_init( &gScaleInfoIDAttr);
 	
-    if ( 0 != pthread_create(&gScaleInfoID, &gScaleInfoIDAttr, (void *)gestureInfoTrans, NULL))
+    if ( 0 != pthread_create(&gGestureInfoID, &gScaleInfoIDAttr, (void *)gestureInfoTrans, NULL))
     {
         printf( "RUN Touch Info Gather THREAD ERROR!\n");
 		ERROR_LOG("RUN Touch Info Gather THREAD ERROR!\n");
@@ -850,7 +858,7 @@ int main(int argc, char **argv)
 	}
 
 	pthread_join(gTouchInfoID,NULL);
-	pthread_join(gScaleInfoID,NULL);
+	pthread_join(gGestureInfoID,NULL);
 	close(gSocket);
 	ComDestroyQueue (&gQueueTouchInfo);
 	return 0;
