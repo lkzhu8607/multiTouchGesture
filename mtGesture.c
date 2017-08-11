@@ -43,7 +43,7 @@ int singleDragTimeFlag = 0;
 pthread_t gTouchInfoID = 0;
 pthread_t gGestureInfoID = 0;
 pthread_attr_t  gTouchInfoIDAttr; 
-pthread_attr_t  gScaleInfoIDAttr;
+pthread_attr_t  gGestureInfoIDAttr;
 
 //COM_QUEUE_HDL gQueueTouchInfo;
 char gInputDeviceFile[128];
@@ -596,6 +596,7 @@ void gestureInfoTrans(void)
 						
 					}
 					else if(detectFingerCount == 2){
+						
 						complementSampleInfo(multiFingersBase[0][index[0]].pointInfo, &multiFingersBase[1][index[0]].pointInfo);
 						complementSampleInfo(multiFingersBase[0][index[1]].pointInfo, &multiFingersBase[1][index[1]].pointInfo);
 
@@ -604,7 +605,7 @@ void gestureInfoTrans(void)
 						if((scale = calScaling(coordinate0Base.variance, coordinate1Base.variance)) != -1)
 						{
 							INFO_LOG("two figners scaling...");
-							setScaleSendData(coordinate1Base, scale, &transInfo);
+							setScaleSendData(coordinate0Base, scale, &transInfo);
 							dragEnableFlag = 1;
 							singleDragTimeFlag = 0;
 							GestureFlag = 2;
@@ -628,7 +629,7 @@ void gestureInfoTrans(void)
 						memset(&multiFingersBase[1][index[0]], 0, sizeof(SAMPLETOUCHINFO));
 						memset(&multiFingersBase[1][index[1]], 0, sizeof(SAMPLETOUCHINFO));
 					}
-					else if(detectFingerCount > 2 && detectFingerCount <= 10){
+					else if(detectFingerCount >= 2 && detectFingerCount <= 10){
 						//补全后点的触摸信息
 						for(i = 0; i < detectFingerCount; i++){
 							complementSampleInfo(multiFingersBase[0][index[i]].pointInfo, &multiFingersBase[1][index[i]].pointInfo);
@@ -648,7 +649,7 @@ void gestureInfoTrans(void)
 							if((scale = calScaling(coordinate0Base.variance, coordinate1Base.variance)) != -1)
 							{
 								INFO_LOG("multi figners scaling...");
-								setScaleSendData(coordinate1Base, scale, &transInfo);
+								setScaleSendData(coordinate0Base, scale, &transInfo);
 							}							
 						}
 						for(i = 0; i < detectFingerCount; i++){
@@ -673,6 +674,15 @@ void gestureInfoTrans(void)
 			//动作数据传输
 			//过滤不合法的transInfo
 			if(ntohl(transInfo.scale) > (BASESCALE * POWERMAX) || ntohl(transInfo.scale) < (BASESCALE * POWERMIN)){
+				continue;
+			}
+			if(ntohl(transInfo.x) > SCREENWIDTH || ntohl(transInfo.y) > SCREENHEIGTH || ntohl(transInfo.dragStart_x) > SCREENWIDTH ||  ntohl(transInfo.dragStart_y) > SCREENHEIGTH || ntohl(transInfo.dragEnd_x) > SCREENWIDTH ||  ntohl(transInfo.dragEnd_y) > SCREENHEIGTH){
+				continue;
+			}
+			if(ntohl(transInfo.x) < 0 || ntohl(transInfo.y) < 0 || ntohl(transInfo.dragStart_x) < 0 ||  ntohl(transInfo.dragStart_y) < 0 || ntohl(transInfo.dragEnd_x) < 0 ||  ntohl(transInfo.dragEnd_y) < 0){
+				continue;
+			}
+			if((ntohl(transInfo.dragStart_x) == ntohl(transInfo.dragEnd_x)) &&(ntohl(transInfo.dragStart_y) == ntohl(transInfo.dragEnd_y))){
 				continue;
 			}
 			
@@ -748,14 +758,14 @@ void gestureInfoTrans(void)
 	}
 }
 
-int initScaleInfoTransThread()
+int initGestureThread()
 {
     /* 初始化线程属性结构体 */
-    pthread_attr_init( &gScaleInfoIDAttr);
+    pthread_attr_init( &gGestureInfoIDAttr);
 	
-    if ( 0 != pthread_create(&gGestureInfoID, &gScaleInfoIDAttr, (void *)gestureInfoTrans, NULL))
+    if ( 0 != pthread_create(&gGestureInfoID, &gGestureInfoIDAttr, (void *)gestureInfoTrans, NULL))
     {
-        printf( "RUN Touch Info Gather THREAD ERROR!\n");
+        //printf( "RUN Touch Info Gather THREAD ERROR!\n");
 		ERROR_LOG("RUN Touch Info Gather THREAD ERROR!\n");
         return -1;
     }
@@ -850,10 +860,10 @@ int main(int argc, char **argv)
 		ERROR_LOG("Fail to start initTouchInfoGatherThread Thread\n");
 		exit(1);
 	}
-	ret = initScaleInfoTransThread();
+	ret = initGestureThread();
 	if(ret < 0){
-		//printf("Fail to start initScaleInfoTransThread Thread\n");
-		ERROR_LOG("Fail to start initScaleInfoTransThread Thread\n");
+		//printf("Fail to start initGestureThread Thread\n");
+		ERROR_LOG("Fail to start initGestureThread Thread\n");
 		exit(1);
 	}
 

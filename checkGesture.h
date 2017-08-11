@@ -75,7 +75,7 @@ typedef struct VERTEXTAG{
 #define DRAGDELTA_Y 340  //以触摸屏本身的分辨率像素为单位，该值为纵向Y轴方向一个手指所占的像素
 
 #define SHIFTRATIO_X 0.1 //多指拖拽时限定值x的偏移范围值比例(单指在x轴所占的像素)
-#define SHIFTRATIO_Y 0.1 //多指拖拽时限定值y的偏移范围值比例(单指在y轴所占的像素)
+#define SHIFTRATIO_Y 0.04 //多指拖拽时限定值y的偏移范围值比例(单指在y轴所占的像素)
 
 //threshold;
 #define DOUBLE_SCALE_THRESHOLD_DISTANCE 90 //触发两指缩放发生的两指间初始间距

@@ -1086,8 +1086,12 @@ int samplePointInfo(TOUCHPOINT pointIn, TOUCHPOINT *pointOut)
 		return -1;
 	if(frontPoint == -1){
 		if(pointIn.code_57 == -1){
-			if(existFingerCount > 0)
-				existFingerCount--;				
+			if(pointIn.code_47 >= 0){
+				if(slotCheck(pointIn.code_47, 0) == 2){
+					if(existFingerCount > 0)
+						existFingerCount--;
+				}
+			}				
 			currentPoint = -1;
 			frontPoint = currentPoint;
 			pointOut->code_47 = pointIn.code_47;
@@ -1126,10 +1130,19 @@ int samplePointInfo(TOUCHPOINT pointIn, TOUCHPOINT *pointOut)
 	}
 	else{
 		if(pointIn.code_57 == -1){
-			if(slotCheck(frontPoint, 0) == 2){
-				if(existFingerCount > 0)
-					existFingerCount--;	
+			if(pointIn.code_47 >= 0){
+				if(slotCheck(pointIn.code_47, 0) == 2){
+					if(existFingerCount > 0)
+						existFingerCount--; 
+				}
 			}
+			else{
+				if(slotCheck(frontPoint, 0) == 2){
+					if(existFingerCount > 0)
+						existFingerCount--; 
+				}
+			}
+
 			currentPoint = -1;
 			pointOut->code_47 = frontPoint;
 			pointOut->code_57 = -1;
@@ -1138,6 +1151,7 @@ int samplePointInfo(TOUCHPOINT pointIn, TOUCHPOINT *pointOut)
 			pointOut->code_0 = pointIn.code_0;
 			pointOut->code_1 = pointIn.code_1;
 			frontPoint = currentPoint;
+			return 0;
 		}
 		else{
 			if(pointIn.code_47 >= 0){
