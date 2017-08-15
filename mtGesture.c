@@ -682,7 +682,7 @@ void gestureInfoTrans(void)
 			if(ntohl(transInfo.x) < 0 || ntohl(transInfo.y) < 0 || ntohl(transInfo.dragStart_x) < 0 ||  ntohl(transInfo.dragStart_y) < 0 || ntohl(transInfo.dragEnd_x) < 0 ||  ntohl(transInfo.dragEnd_y) < 0){
 				continue;
 			}
-			if((ntohl(transInfo.dragStart_x) == ntohl(transInfo.dragEnd_x)) &&(ntohl(transInfo.dragStart_y) == ntohl(transInfo.dragEnd_y))){
+			if(ntohl(transInfo.scale)==10000 && (ntohl(transInfo.dragStart_x) == ntohl(transInfo.dragEnd_x)) &&(ntohl(transInfo.dragStart_y) == ntohl(transInfo.dragEnd_y))){
 				continue;
 			}
 			

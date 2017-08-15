@@ -64,7 +64,7 @@ typedef struct VERTEXTAG{
 
 #define DRAGSUITDISTANCE 0 //可以当做两点拖拽的操作的，前后两次距离差的合适最大差值
 
-#define STATICDELTA 5 //静态时到动态缩放的坐标移动触发缩放的阈值
+#define STATICDELTA 2 //静态时到动态缩放的坐标移动触发缩放的阈值
 #define DYNAMICDELTA 0 //动态时的坐标移动触发缩放的阈值
 
 #define DRAGTRIGGERDISTANCE 1 //拖拽的触发长度
