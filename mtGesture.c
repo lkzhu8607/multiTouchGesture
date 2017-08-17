@@ -36,8 +36,14 @@ static int releaseFlag = 0;//0,表示触摸屏上次操作存在手指信息；1，表示上次操作后
 #define MINOR_VERSION 00  //次版本号
 
 
+#define FILTER_SCALE_GESTURE 2
 
 #define FILTER_DRAG_GESTURE 4 //过滤缩放过程中因夹杂的拖拽动作产生的抖动
+
+//int scaleUnfilterFlag = 0;
+int scalefilterFlag = 0;
+int scaleTimeFlag = 0;
+
 
 int singleDragTimeFlag = 0;
 pthread_t gTouchInfoID = 0;
@@ -205,17 +211,27 @@ int setDragTransData(AXIS CoordinateS, AXIS CoordinateE, TRANSINFO *transInfo)
 		return -1;
 
 	if(gSetting.mode == 1){
-		transInfo->dragStart_x = htonl(CoordinateS.x * SCREENWIDTH / gScreenInfo.x.max);
+		/*transInfo->dragStart_x = htonl(CoordinateS.x * SCREENWIDTH / gScreenInfo.x.max);
 		transInfo->dragStart_y = htonl(CoordinateS.y * SCREENHEIGTH / gScreenInfo.y.max);
 		transInfo->dragEnd_x = htonl(CoordinateE.x * SCREENWIDTH / gScreenInfo.x.max);
-		transInfo->dragEnd_y = htonl(CoordinateE.y * SCREENHEIGTH / gScreenInfo.y.max);
+		transInfo->dragEnd_y = htonl(CoordinateE.y * SCREENHEIGTH / gScreenInfo.y.max);*/
+
+		transInfo->dragStart_x = htonl(halfAdjust(CoordinateS.x * SCREENWIDTH / gScreenInfo.x.max));
+		transInfo->dragStart_y = htonl(halfAdjust(CoordinateS.y * SCREENHEIGTH / gScreenInfo.y.max));
+		transInfo->dragEnd_x = htonl(halfAdjust(CoordinateE.x * SCREENWIDTH / gScreenInfo.x.max));
+		transInfo->dragEnd_y = htonl(halfAdjust(CoordinateE.y * SCREENHEIGTH / gScreenInfo.y.max));		
 	}
 	
 	if(gSetting.mode == 2){
-		transInfo->dragStart_x = htonl(CoordinateS.x * SCREENWIDTH / 5801);
+		/*transInfo->dragStart_x = htonl(CoordinateS.x * SCREENWIDTH / 5801);
 		transInfo->dragStart_y = htonl(CoordinateS.y * SCREENHEIGTH / 4095);
 		transInfo->dragEnd_x = htonl(CoordinateE.x * SCREENWIDTH / 5801);
-		transInfo->dragEnd_y = htonl(CoordinateE.y * SCREENHEIGTH / 4095);
+		transInfo->dragEnd_y = htonl(CoordinateE.y * SCREENHEIGTH / 4095);*/
+
+		transInfo->dragStart_x = htonl(halfAdjust(CoordinateS.x * SCREENWIDTH / 5801));
+		transInfo->dragStart_y = htonl(halfAdjust(CoordinateS.y * SCREENHEIGTH / 4095));
+		transInfo->dragEnd_x = htonl(halfAdjust(CoordinateE.x * SCREENWIDTH / 5801));
+		transInfo->dragEnd_y = htonl(halfAdjust(CoordinateE.y * SCREENHEIGTH / 4095));		
 	}
 
 	return 0;
@@ -234,17 +250,27 @@ int setSingleDragSendData(TOUCHPOINT point0, TOUCHPOINT point1, TRANSINFO *trans
 		return -1;
 
 	if(gSetting.mode == 1){
-		transInfo->dragStart_x = htonl(point0.code_53 * SCREENWIDTH / gScreenInfo.x.max);
+		/*transInfo->dragStart_x = htonl(point0.code_53 * SCREENWIDTH / gScreenInfo.x.max);
 		transInfo->dragStart_y = htonl(point0.code_54 * SCREENHEIGTH / gScreenInfo.y.max);
 		transInfo->dragEnd_x = htonl(point1.code_53 * SCREENWIDTH / gScreenInfo.x.max);
-		transInfo->dragEnd_y = htonl(point1.code_54 * SCREENHEIGTH / gScreenInfo.y.max);
+		transInfo->dragEnd_y = htonl(point1.code_54 * SCREENHEIGTH / gScreenInfo.y.max);*/
+
+		transInfo->dragStart_x = htonl(halfAdjust(point0.code_53 * SCREENWIDTH / gScreenInfo.x.max));
+		transInfo->dragStart_y = htonl(halfAdjust(point0.code_54 * SCREENHEIGTH / gScreenInfo.y.max));
+		transInfo->dragEnd_x = htonl(halfAdjust(point1.code_53 * SCREENWIDTH / gScreenInfo.x.max));
+		transInfo->dragEnd_y = htonl(halfAdjust(point1.code_54 * SCREENHEIGTH / gScreenInfo.y.max));		
 	}
 	
 	if(gSetting.mode == 2){
-		transInfo->dragStart_x = htonl(point0.code_53 * SCREENWIDTH / 5801);
+		/*transInfo->dragStart_x = htonl(point0.code_53 * SCREENWIDTH / 5801);
 		transInfo->dragStart_y = htonl(point0.code_54 * SCREENHEIGTH / 4095);
 		transInfo->dragEnd_x = htonl(point1.code_53 * SCREENWIDTH / 5801);
-		transInfo->dragEnd_y = htonl(point1.code_54 * SCREENHEIGTH / 4095);
+		transInfo->dragEnd_y = htonl(point1.code_54 * SCREENHEIGTH / 4095);*/
+
+		transInfo->dragStart_x = htonl(halfAdjust(point0.code_53 * SCREENWIDTH / 5801));
+		transInfo->dragStart_y = htonl(halfAdjust(point0.code_54 * SCREENHEIGTH / 4095));
+		transInfo->dragEnd_x = htonl(halfAdjust(point1.code_53 * SCREENWIDTH / 5801));
+		transInfo->dragEnd_y = htonl(halfAdjust(point1.code_54 * SCREENHEIGTH / 4095));		
 	}
 
 	return 0;
@@ -259,17 +285,25 @@ int setDoubleDragSendData(TWOPOINTDRAG doubleMoveCenter, TRANSINFO *transInfo)
 	transInfo->y = 0;	
 	
 	if(gSetting.mode == 1){
-		transInfo->dragStart_x = htonl(doubleMoveCenter.startX * SCREENWIDTH / gScreenInfo.x.max);
+		/*transInfo->dragStart_x = htonl(doubleMoveCenter.startX * SCREENWIDTH / gScreenInfo.x.max);
 		transInfo->dragStart_y = htonl(doubleMoveCenter.startY * SCREENHEIGTH / gScreenInfo.y.max);
 		transInfo->dragEnd_x = htonl(doubleMoveCenter.endX * SCREENWIDTH / gScreenInfo.x.max);
-		transInfo->dragEnd_y = htonl(doubleMoveCenter.endY * SCREENHEIGTH / gScreenInfo.y.max);
+		transInfo->dragEnd_y = htonl(doubleMoveCenter.endY * SCREENHEIGTH / gScreenInfo.y.max);*/
+		transInfo->dragStart_x = htonl(halfAdjust(doubleMoveCenter.startX * SCREENWIDTH / gScreenInfo.x.max));
+		transInfo->dragStart_y = htonl(halfAdjust(doubleMoveCenter.startY * SCREENHEIGTH / gScreenInfo.y.max));
+		transInfo->dragEnd_x = htonl(halfAdjust(doubleMoveCenter.endX * SCREENWIDTH / gScreenInfo.x.max));
+		transInfo->dragEnd_y = htonl(halfAdjust(doubleMoveCenter.endY * SCREENHEIGTH / gScreenInfo.y.max));		
 	}
 	
 	if(gSetting.mode == 2){
-		transInfo->dragStart_x = htonl(doubleMoveCenter.startX * SCREENWIDTH / 5801);
+		/*transInfo->dragStart_x = htonl(doubleMoveCenter.startX * SCREENWIDTH / 5801);
 		transInfo->dragStart_y = htonl(doubleMoveCenter.startY * SCREENHEIGTH / 4095);
 		transInfo->dragEnd_x = htonl(doubleMoveCenter.endX * SCREENWIDTH / 5801);
-		transInfo->dragEnd_y = htonl(doubleMoveCenter.endY * SCREENHEIGTH / 4095);
+		transInfo->dragEnd_y = htonl(doubleMoveCenter.endY * SCREENHEIGTH / 4095);*/
+		transInfo->dragStart_x = htonl(halfAdjust(doubleMoveCenter.startX * SCREENWIDTH / 5801));
+		transInfo->dragStart_y = htonl(halfAdjust(doubleMoveCenter.startY * SCREENHEIGTH / 4095));
+		transInfo->dragEnd_x = htonl(halfAdjust(doubleMoveCenter.endX * SCREENWIDTH / 5801));
+		transInfo->dragEnd_y = htonl(halfAdjust(doubleMoveCenter.endY * SCREENHEIGTH / 4095));		
 	}	
 	return 0;
 }
@@ -287,14 +321,18 @@ int setScaleSendData(COORDINATEINFO coordinateInfo,int scale,TRANSINFO *transInf
 	if(gSetting.mode == 1){
 		if(coordinateInfo.center_x > gScreenInfo.x.max || coordinateInfo.center_y > gScreenInfo.y.max)
 			return -1;		
-		transInfo->x = htonl(coordinateInfo.center_x * SCREENWIDTH / gScreenInfo.x.max);
-		transInfo->y = htonl(coordinateInfo.center_y * SCREENHEIGTH / gScreenInfo.y.max);
+		//transInfo->x = htonl(coordinateInfo.center_x * SCREENWIDTH / gScreenInfo.x.max);
+		transInfo->x = htonl(halfAdjust(coordinateInfo.center_x * SCREENWIDTH / gScreenInfo.x.max));
+		//transInfo->y = htonl(coordinateInfo.center_y * SCREENHEIGTH / gScreenInfo.y.max);
+		transInfo->y = htonl(halfAdjust(coordinateInfo.center_y * SCREENHEIGTH / gScreenInfo.y.max));
 	}
 	else if(gSetting.mode == 2){
 		if(coordinateInfo.center_x > 5801 || coordinateInfo.center_y > 4095)
 			return -1;		
-		transInfo->x = htonl(coordinateInfo.center_x * SCREENWIDTH / 5801);
-		transInfo->y = htonl(coordinateInfo.center_y * SCREENHEIGTH / 4095);
+		//transInfo->x = htonl(coordinateInfo.center_x * SCREENWIDTH / 5801);
+		//transInfo->y = htonl(coordinateInfo.center_y * SCREENHEIGTH / 4095);
+		transInfo->x = htonl(halfAdjust(coordinateInfo.center_x * SCREENWIDTH / 5801));
+		transInfo->y = htonl(halfAdjust(coordinateInfo.center_y * SCREENHEIGTH / 4095));		
 	}
 	transInfo->scale = htonl(scale);
 	transInfo->dragStart_x = 0;
@@ -596,24 +634,24 @@ void gestureInfoTrans(void)
 						
 					}
 					else if(detectFingerCount == 2){
-						
 						complementSampleInfo(multiFingersBase[0][index[0]].pointInfo, &multiFingersBase[1][index[0]].pointInfo);
 						complementSampleInfo(multiFingersBase[0][index[1]].pointInfo, &multiFingersBase[1][index[1]].pointInfo);
 
-						calCenterCoordinate(multiFingersBase[0][index[0]].pointInfo,  multiFingersBase[0][index[1]].pointInfo, &coordinate0Base);
+						/*calCenterCoordinate(multiFingersBase[0][index[0]].pointInfo,  multiFingersBase[0][index[1]].pointInfo, &coordinate0Base);
 						calCenterCoordinate(multiFingersBase[1][index[0]].pointInfo,  multiFingersBase[1][index[1]].pointInfo, &coordinate1Base);
 						if((scale = calScaling(coordinate0Base.variance, coordinate1Base.variance)) != -1)
 						{
 							INFO_LOG("two figners scaling...");
 							setScaleSendData(coordinate0Base, scale, &transInfo);
-							dragEnableFlag = 1;
+							//dragEnableFlag = 1;
 							singleDragTimeFlag = 0;
+							scaleTimeFlag++;
 							GestureFlag = 2;
-						}	
+						}*/
 
 						calCoordinateDeviation(multiFingersBase[0][index[0]].pointInfo, multiFingersBase[0][index[1]].pointInfo, &D_value[0].x, &D_value[0].y);
 						calCoordinateDeviation(multiFingersBase[1][index[0]].pointInfo, multiFingersBase[1][index[1]].pointInfo, &D_value[1].x, &D_value[1].y);
-						if(calD_value(D_value) == 0){//两点拖拽动作生效
+						/*if(calD_value(D_value) == 0){//两点拖拽动作生效
 							singleDragTimeFlag++;
 							INFO_LOG("two figners dragging...");
 							dragS_to_Epoint[0].x = coordinate0Base.center_x;
@@ -622,6 +660,35 @@ void gestureInfoTrans(void)
 							dragS_to_Epoint[1].y = coordinate1Base.center_y;
 							GestureFlag = 1;
 							setDragTransData(dragS_to_Epoint[0], dragS_to_Epoint[1], &transInfo);
+						}*/
+
+						if(calD_value(D_value) == 0){
+							singleDragTimeFlag++;
+							INFO_LOG("two figners dragging...");
+							/*dragS_to_Epoint[0].x = coordinate0Base.center_x;
+							dragS_to_Epoint[0].y = coordinate0Base.center_y;
+							dragS_to_Epoint[1].x = coordinate1Base.center_x;
+							dragS_to_Epoint[1].y = coordinate1Base.center_y;*/
+							dragS_to_Epoint[0].x = multiFingersBase[0][index[0]].pointInfo.code_53;
+							dragS_to_Epoint[0].y = multiFingersBase[0][index[0]].pointInfo.code_54;
+							dragS_to_Epoint[1].x = multiFingersBase[1][index[0]].pointInfo.code_53;
+							dragS_to_Epoint[1].y = multiFingersBase[1][index[0]].pointInfo.code_54;
+							GestureFlag = 1;
+							setDragTransData(dragS_to_Epoint[0], dragS_to_Epoint[1], &transInfo);
+
+						}
+						else{
+							calCenterCoordinate(multiFingersBase[0][index[0]].pointInfo,  multiFingersBase[0][index[1]].pointInfo, &coordinate0Base);
+							calCenterCoordinate(multiFingersBase[1][index[0]].pointInfo,  multiFingersBase[1][index[1]].pointInfo, &coordinate1Base);
+							if((scale = calScaling(coordinate0Base.variance, coordinate1Base.variance)) != -1)
+							{
+								INFO_LOG("two figners scaling...");
+								setScaleSendData(coordinate0Base, scale, &transInfo);
+								//dragEnableFlag = 1;
+								singleDragTimeFlag = 0;
+								scaleTimeFlag++;
+								GestureFlag = 2;
+							}
 						}
 
 						memcpy(&multiFingersBase[0][index[0]].pointInfo, &multiFingersBase[1][index[0]].pointInfo, sizeof(TOUCHPOINT));
@@ -629,7 +696,7 @@ void gestureInfoTrans(void)
 						memset(&multiFingersBase[1][index[0]], 0, sizeof(SAMPLETOUCHINFO));
 						memset(&multiFingersBase[1][index[1]], 0, sizeof(SAMPLETOUCHINFO));
 					}
-					else if(detectFingerCount >= 2 && detectFingerCount <= 10){
+					else if(detectFingerCount > 2 && detectFingerCount <= 10){
 						//补全后点的触摸信息
 						for(i = 0; i < detectFingerCount; i++){
 							complementSampleInfo(multiFingersBase[0][index[i]].pointInfo, &multiFingersBase[1][index[i]].pointInfo);
@@ -642,8 +709,9 @@ void gestureInfoTrans(void)
 							setDragTransData(dragS_to_Epoint[0], dragS_to_Epoint[1], &transInfo);
 						}
 						else if(GestureFlag == 2){
-							dragEnableFlag = 1;
+							//dragEnableFlag = 1;
 							singleDragTimeFlag = 0;
+							scaleTimeFlag++;
 							calCenterCoordinate(ScalePoint[0][0],  ScalePoint[0][1], &coordinate0Base);
 							calCenterCoordinate(ScalePoint[1][0],  ScalePoint[1][1], &coordinate1Base);
 							if((scale = calScaling(coordinate0Base.variance, coordinate1Base.variance)) != -1)
@@ -682,12 +750,14 @@ void gestureInfoTrans(void)
 			if(ntohl(transInfo.x) < 0 || ntohl(transInfo.y) < 0 || ntohl(transInfo.dragStart_x) < 0 ||  ntohl(transInfo.dragStart_y) < 0 || ntohl(transInfo.dragEnd_x) < 0 ||  ntohl(transInfo.dragEnd_y) < 0){
 				continue;
 			}
-			if(ntohl(transInfo.scale)==10000 && (ntohl(transInfo.dragStart_x) == ntohl(transInfo.dragEnd_x)) &&(ntohl(transInfo.dragStart_y) == ntohl(transInfo.dragEnd_y))){
+			//if(ntohl(transInfo.scale)==10000 && ((ntohl(transInfo.dragEnd_x) <= (ntohl(transInfo.dragStart_x) + FILTER_TREMBLE_X)) || (ntohl(transInfo.dragEnd_x) >= (ntohl(transInfo.dragStart_x) - FILTER_TREMBLE_X))) && ((ntohl(transInfo.dragEnd_y) <= (ntohl(transInfo.dragStart_y) + FILTER_TREMBLE_Y)) || (ntohl(transInfo.dragEnd_y) >= (ntohl(transInfo.dragStart_y) - FILTER_TREMBLE_Y)))){
+			if(ntohl(transInfo.scale)==10000 && (ntohl(transInfo.dragEnd_x) == ntohl(transInfo.dragStart_x)) && (ntohl(transInfo.dragEnd_y) == ntohl(transInfo.dragStart_y))){
 				continue;
 			}
 			
-			if(GestureFlag == 2){
+			//if(GestureFlag == 2){
 				if(GestureFlag == 2){
+					dragEnableFlag = 1;
 					if(gSetting.mode == 2){
 						gettimeofday(&tv, NULL);
 						SEND_LOG("%ld\t%06ld\t%d\t%d\t%d\t%d\t%d\t%d\t%d", tv.tv_sec, tv.tv_usec, ntohl(transInfo.scale), ntohl(transInfo.x), ntohl(transInfo.y), 0, 0, 0, 0);
@@ -698,6 +768,16 @@ void gestureInfoTrans(void)
 						while(1){
 							if(checkConn(gSocket) == 0){
 								gettimeofday(&tv, NULL);
+								/*if(scalefilterFlag == 0){
+									if(sendData(gSocket, data, 28)==0)//发送数据
+										SEND_LOG("%ld\t%06ld\t%d\t%d\t%d\t%d\t%d\t%d\t%d", tv.tv_sec, tv.tv_usec, ntohl(transInfo.scale), ntohl(transInfo.x), ntohl(transInfo.y), 0, 0, 0, 0);
+								}
+								else if(scalefilterFlag == 1){
+									if(scaleTimeFlag > FILTER_SCALE_GESTURE){
+										if(sendData(gSocket, data, 28)==0)//发送数据
+											SEND_LOG("%ld\t%06ld\t%d\t%d\t%d\t%d\t%d\t%d\t%d", tv.tv_sec, tv.tv_usec, ntohl(transInfo.scale), ntohl(transInfo.x), ntohl(transInfo.y), 0, 0, 0, 0);
+									}
+								}*/
 								if(sendData(gSocket, data, 28)==0)//发送数据
 									SEND_LOG("%ld\t%06ld\t%d\t%d\t%d\t%d\t%d\t%d\t%d", tv.tv_sec, tv.tv_usec, ntohl(transInfo.scale), ntohl(transInfo.x), ntohl(transInfo.y), 0, 0, 0, 0);
 								break;							
@@ -709,12 +789,13 @@ void gestureInfoTrans(void)
 						}
 					}
 				}
-			}
-			else if(GestureFlag == 1){
+			//}
+			else if(GestureFlag == 1){				
 				if(gSetting.mode == 2){
 					dragEnableFlag = 1;
 				}
 				if(dragEnableFlag == 1){
+					scalefilterFlag = 1;
 					if(gSetting.mode == 2){
 						gettimeofday(&tv, NULL);
 						SEND_LOG("%ld\t%06ld\t%d\t%d\t%d\t%d\t%d\t%d\t%d", tv.tv_sec, tv.tv_usec, 10000, 0, 0, ntohl(transInfo.dragStart_x), ntohl(transInfo.dragStart_y), ntohl(transInfo.dragEnd_x), ntohl(transInfo.dragEnd_y));

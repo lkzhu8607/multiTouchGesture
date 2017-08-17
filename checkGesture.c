@@ -25,6 +25,22 @@ int detectFingerCount = 0;//当前正在监测到的手指个数
 static TOUCHPOINT LastTouchedPointInfo = {0, 0, 0, 0, 0, 0, 0, 0, 0};//上一个非离开点信息
 FINGER slotStatus[10] = {{0,0},{1,0},{2,0},{3,0},{4,0},{5,0},{6,0},{7,0},{8,0},{9,0}};
 
+//四舍五入
+int halfAdjust(double input)
+{
+	int tmpI = 0;
+	int tmpD = 0.0;
+	int output = 0;
+	tmpI = (int)input;
+	tmpD = tmpI + 0.5;
+	if(tmpD > input){
+		output = tmpI;
+	}
+	else
+		output = tmpI + 1;
+	return output;	
+}
+
 
 //两点拖拽
 int calTwoPointDrag(TOUCHPOINT groupPoint0[2], TOUCHPOINT groupPoint1[2], TWOPOINTDRAG * doubleFingerCenter)
@@ -90,7 +106,7 @@ int calD_value(AXIS value[2])
 	else
 		deltaY = value[0].y - value[1].y;	
 
-	if((deltaX < DRAGDELTA_X * SHIFTRATIO_X) && (deltaY < DRAGDELTA_Y * SHIFTRATIO_Y)){
+	if((deltaX < (DRAGDELTA_X * SHIFTRATIO_X)) && (deltaY < (DRAGDELTA_Y * SHIFTRATIO_Y))){
 		return 0;
 	}
 	return -1;
@@ -686,12 +702,18 @@ int calSinglePointMoveDistance(TOUCHPOINT point0, TOUCHPOINT point1)
 
 	if(x > 0 && y > 0){
 		if(gSetting.mode == 1){
-			tmpX = x * SCREENWIDTH / gScreenInfo.x.max;
-			tmpY = y * SCREENHEIGTH / gScreenInfo.y.max;
+			//tmpX = x * SCREENWIDTH / gScreenInfo.x.max;
+			//tmpY = y * SCREENHEIGTH / gScreenInfo.y.max;
+
+			tmpX = halfAdjust(x * SCREENWIDTH / gScreenInfo.x.max);
+			tmpY = halfAdjust(y * SCREENHEIGTH / gScreenInfo.y.max);			
 		}
 		else if(gSetting.mode == 2){
-			tmpX = x * SCREENWIDTH / 5801;
-			tmpY = y * SCREENHEIGTH / 4095;			
+			/*tmpX = x * SCREENWIDTH / 5801;
+			tmpY = y * SCREENHEIGTH / 4095;*/		
+
+			tmpX = halfAdjust(x * SCREENWIDTH / 5801);
+			tmpY = halfAdjust(y * SCREENHEIGTH / 4095);				
 		}
 		delta = sqrt(SQUARE(tmpX) + SQUARE(tmpY));
 	}
@@ -1006,16 +1028,16 @@ int calScaling(int base0variance, int base1variance)
 		}
 		startFlag = 1;
 	}
-	else
+	else if(startFlag == 1)
 	{
 		if((base1Len - base0Len) >= 0)
 		{
-			if((base1Len - base0Len) < STATICDELTA)
+			if((base1Len - base0Len) < DYNAMICDELTA)
 				return -1;
 		}
 		else
 		{
-			if((base0Len - base1Len) < STATICDELTA)
+			if((base0Len - base1Len) < DYNAMICDELTA)
 				return -1;			
 		}
 

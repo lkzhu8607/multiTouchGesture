@@ -72,4 +72,5 @@ typedef struct SETTINGTAG{
 	char fileName[128];//当mode = 1时，保存的是设备文件; 当mode = 2时，保存的是已保存触屏信号源信息的文件名
 }SETTING;
 extern SETTING gSetting;
+
 #endif
